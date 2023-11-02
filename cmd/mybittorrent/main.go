@@ -36,9 +36,9 @@ func decodeBencode(bencodedString string) (interface{}, error) {
 		return bencodedString[firstColonIndex+1 : firstColonIndex+1+length], nil
 	} else if number, intErr := decodeBenEncdoedNumber(bencodedString); intErr == nil {
 		return number, err
-	} else if data, err := bencode.Decode(strings.NewReader(bencodedString)); err = nil {
+	} else if data, err := bencode.Decode(strings.NewReader(bencodedString)); err == nil {
 		return data, err
-		} else {
+	} else {
 		return "", fmt.Errorf("only strings are supported at the moment")
 	}
 }
