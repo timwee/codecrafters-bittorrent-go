@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"unicode"
-	// bencode "github.com/jackpal/bencode-go" // Available if you need it!
+
+	bencode "github.com/jackpal/bencode-go" // Available if you need it!
 )
 
 // Example:
@@ -32,9 +34,11 @@ func decodeBencode(bencodedString string) (interface{}, error) {
 		}
 
 		return bencodedString[firstColonIndex+1 : firstColonIndex+1+length], nil
-	} else if number, err := decodeBenEncdoedNumber(bencodedString); err == nil {
+	} else if number, intErr := decodeBenEncdoedNumber(bencodedString); intErr == nil {
 		return number, err
-	} else {
+	} else if data, err := bencode.Decode(strings.NewReader(bencodedString)); err = nil {
+		return data, err
+		} else {
 		return "", fmt.Errorf("only strings are supported at the moment")
 	}
 }
