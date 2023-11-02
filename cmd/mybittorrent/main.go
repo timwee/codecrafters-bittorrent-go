@@ -32,9 +32,23 @@ func decodeBencode(bencodedString string) (interface{}, error) {
 		}
 
 		return bencodedString[firstColonIndex+1 : firstColonIndex+1+length], nil
+	} else if number, err := decodeBenEncdoedNumber(bencodedString); err != nil {
+		return number, err
 	} else {
 		return "", fmt.Errorf("only strings are supported at the moment")
 	}
+}
+
+func decodeBenEncdoedNumber(bencodedString string) (int, error) {
+	strSize := len(bencodedString)
+	if strSize < 3 {
+		return -1, fmt.Errorf("Not long enough for ben encoded int")
+	}
+	if bencodedString[0] != 'i' || bencodedString[strSize-1] != 'e' {
+		return -1, fmt.Errorf("Doesn't have i and e surrounding the string.")
+	}
+	return strconv.Atoi(bencodedString[1 : strSize-1])
+
 }
 
 func main() {
