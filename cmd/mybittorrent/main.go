@@ -65,6 +65,18 @@ func readFileToString(fileName string) (string, error) {
 	return string(b), nil
 }
 
+func printInfo(m map[string]interface{}) {
+	if url, ok := m["announce"]; ok {
+		fmt.Printf("Tracker URL: %s\n", url)
+		if info, ok := m["info"]; ok {
+			if mInfo, ok := info.(map[string]interface{}); ok {
+				// fmt.Print(mInfo)
+				fmt.Printf("Length: %d", mInfo["length"])
+			}
+		}
+	}
+}
+
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	// fmt.Println("Logs from your program will appear here!")
@@ -94,7 +106,11 @@ func main() {
 			fmt.Println(err)
 			return
 		}
-		fmt.Println(decoded)
+		if m, ok := decoded.(map[string]interface{}); ok {
+			printInfo(m)
+		} else {
+			fmt.Println("Error encountered in parsing torrent file for info command")
+		}
 	} else {
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
