@@ -59,7 +59,7 @@ func decodeBenEncdoedNumber(bencodedString string) (int, error) {
 func readFileToString(fileName string) (string, error) {
 	b, err := os.ReadFile(fileName)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	return string(b), nil
