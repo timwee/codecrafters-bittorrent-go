@@ -2,6 +2,9 @@ package main
 
 import (
 	// Uncomment this line to pass the first stage
+	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -71,7 +74,16 @@ func printInfo(m map[string]interface{}) {
 		if info, ok := m["info"]; ok {
 			if mInfo, ok := info.(map[string]interface{}); ok {
 				// fmt.Print(mInfo)
-				fmt.Printf("Length: %d", mInfo["length"])
+				fmt.Printf("Length: %d\n", mInfo["length"])
+
+				var buf bytes.Buffer
+				if marshalErr := bencode.Marshal(&buf, info); marshalErr == nil {
+					hasher := sha1.New()
+					hasher.Write(buf.Bytes())
+					// shaInfo := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
+					shaInfo := hex.EncodeToString(hasher.Sum(nil))
+					fmt.Printf("Info Hash: %s", shaInfo)
+				}
 			}
 		}
 	}
