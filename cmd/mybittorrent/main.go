@@ -56,6 +56,15 @@ func decodeBenEncdoedNumber(bencodedString string) (int, error) {
 
 }
 
+func readFileToString(fileName string) (string, error) {
+	b, err := os.ReadFile(fileName)
+	if err != nil {
+		return nil, err
+	}
+
+	return string(b), nil
+}
+
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	// fmt.Println("Logs from your program will appear here!")
@@ -63,8 +72,6 @@ func main() {
 	command := os.Args[1]
 
 	if command == "decode" {
-		// Uncomment this block to pass the first stage
-
 		bencodedValue := os.Args[2]
 
 		decoded, err := decodeBencode(bencodedValue)
@@ -75,6 +82,19 @@ func main() {
 
 		jsonOutput, _ := json.Marshal(decoded)
 		fmt.Println(string(jsonOutput))
+	} else if command == "info" {
+		fileName := os.Args[2]
+		contents, err := readFileToString(fileName)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		decoded, err := decodeBencode(contents)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println(decoded)
 	} else {
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
