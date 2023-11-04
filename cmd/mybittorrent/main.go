@@ -4,7 +4,6 @@ import (
 	// Uncomment this line to pass the first stage
 	"bytes"
 	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +13,18 @@ import (
 
 	bencode "github.com/jackpal/bencode-go" // Available if you need it!
 )
+
+type TorrentFileInfo struct {
+	Length      int    `bencode:"length"`
+	Name        string `bencode:"name"`
+	PieceLength int    `bencode:"piece length"`
+	Pieces      string `bencode:"pieces"`
+}
+
+type TorrentFile struct {
+	Announce string
+	Info     TorrentFileInfo
+}
 
 // Example:
 // - 5:hello -> hello
@@ -59,40 +70,47 @@ func decodeBenEncdoedNumber(bencodedString string) (int, error) {
 
 }
 
-func readFileToString(fileName string) (string, error) {
-	b, err := os.ReadFile(fileName)
-	if err != nil {
-		return "", err
-	}
+func printInfo(torrent TorrentFile, hash []byte) {
 
-	return string(b), nil
+	fmt.Printf("Tracker URL: %s", torrent.Announce)
+	fmt.Printf("Length: %d\n", torrent.Info.Length)
+	fmt.Printf("Info Hash: %x\n", hash)
+	fmt.Printf("Piece Length: %d\n", torrent.Info.PieceLength)
+	fmt.Println("Pieces Hashes:")
+	for i := 0; i < len(torrent.Info.Pieces); i += 20 {
+		fmt.Printf("%x\n", torrent.Info.Pieces[i:i+20])
+	}
 }
 
-func printInfo(m map[string]interface{}) {
-	if url, ok := m["announce"]; ok {
-		fmt.Printf("Tracker URL: %s\n", url)
-		if info, ok := m["info"]; ok {
-			if mInfo, ok := info.(map[string]interface{}); ok {
-				// fmt.Print(mInfo)
-				fmt.Printf("Length: %d\n", mInfo["length"])
-
-				var buf bytes.Buffer
-				if marshalErr := bencode.Marshal(&buf, info); marshalErr == nil {
-					hasher := sha1.New()
-					hasher.Write(buf.Bytes())
-					// shaInfo := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
-					shaInfo := hex.EncodeToString(hasher.Sum(nil))
-					fmt.Printf("Info Hash: %s", shaInfo)
-				}
-			}
-		}
+func ParseTorrentFile(filename string) (TorrentFile, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return TorrentFile{}, err
 	}
+	defer file.Close()
+
+	info := TorrentFile{}
+	if err := bencode.Unmarshal(file, &info); err == nil {
+		return info, nil
+	} else {
+		return TorrentFile{}, err
+	}
+}
+
+func torrentInfoHash(torrentFile TorrentFile) ([]byte, error) {
+	var buf bytes.Buffer
+	marshalErr := bencode.Marshal(&buf, torrentFile.Info)
+	if marshalErr != nil {
+		return nil, marshalErr
+	}
+	hasher := sha1.New()
+	hasher.Write(buf.Bytes())
+	// shaInfo := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
+	shaInfo := hasher.Sum(nil)
+	return shaInfo, nil
 }
 
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
-	// fmt.Println("Logs from your program will appear here!")
-
 	command := os.Args[1]
 
 	if command == "decode" {
@@ -108,21 +126,19 @@ func main() {
 		fmt.Println(string(jsonOutput))
 	} else if command == "info" {
 		fileName := os.Args[2]
-		contents, err := readFileToString(fileName)
+		torrentFile, err := ParseTorrentFile(fileName)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		decoded, err := decodeBencode(contents)
+		hash, err := torrentInfoHash(torrentFile)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		if m, ok := decoded.(map[string]interface{}); ok {
-			printInfo(m)
-		} else {
-			fmt.Println("Error encountered in parsing torrent file for info command")
-		}
+
+		printInfo(torrentFile, hash)
+
 	} else {
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
