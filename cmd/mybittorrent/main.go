@@ -13,7 +13,6 @@ import (
 	"strings"
 	"unicode"
 
-	lib "github.com/codecrafters-io/bittorrent-starter-go/lib"
 	bencode "github.com/jackpal/bencode-go" // Available if you need it!
 )
 
@@ -61,7 +60,7 @@ func decodeBenEncdoedNumber(bencodedString string) (int, error) {
 
 }
 
-func printInfo(torrent lib.TorrentFile, hash []byte) {
+func printInfo(torrent TorrentFile, hash []byte) {
 
 	fmt.Printf("Tracker URL: %s", torrent.Announce)
 	fmt.Printf("Length: %d\n", torrent.Info.Length)
@@ -73,22 +72,22 @@ func printInfo(torrent lib.TorrentFile, hash []byte) {
 	}
 }
 
-func ParseTorrentFile(filename string) (lib.TorrentFile, error) {
+func ParseTorrentFile(filename string) (TorrentFile, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return lib.TorrentFile{}, err
+		return TorrentFile{}, err
 	}
 	defer file.Close()
 
-	info := lib.TorrentFile{}
+	info := TorrentFile{}
 	if err := bencode.Unmarshal(file, &info); err == nil {
 		return info, nil
 	} else {
-		return lib.TorrentFile{}, err
+		return TorrentFile{}, err
 	}
 }
 
-func torrentInfoHash(torrentFile lib.TorrentFile) ([]byte, error) {
+func torrentInfoHash(torrentFile TorrentFile) ([]byte, error) {
 	var buf bytes.Buffer
 	marshalErr := bencode.Marshal(&buf, torrentFile.Info)
 	if marshalErr != nil {
@@ -101,7 +100,7 @@ func torrentInfoHash(torrentFile lib.TorrentFile) ([]byte, error) {
 	return shaInfo, nil
 }
 
-func printIPs(trackerResp lib.TrackerResponse) {
+func printIPs(trackerResp TrackerResponse) {
 	offset := 0
 	for offset+6 <= len(trackerResp.Peers) {
 		ip := net.IP(trackerResp.Peers[offset : offset+4])
@@ -153,7 +152,7 @@ func main() {
 			fmt.Println(err)
 			return
 		}
-		trackerResp, err := lib.GetPeers(torrentFile, hash)
+		trackerResp, err := GetPeers(torrentFile, hash)
 		if err != nil {
 			fmt.Println(err)
 			return
