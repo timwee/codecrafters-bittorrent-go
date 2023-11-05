@@ -40,3 +40,11 @@ func DefaultTrackerClientParams(infoHash string, fileLength int) *TrackerClientP
 		Compact:    "1",
 	}
 }
+
+type PeerHandshakeMessage struct {
+	ProtocolLength uint8
+	Protocol       [19]byte
+	Reserved       [8]byte
+	InfoHash       [20]byte
+	PeerId         [20]byte
+}

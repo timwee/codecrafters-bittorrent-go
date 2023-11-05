@@ -159,6 +159,25 @@ func main() {
 		}
 		printIPs(trackerResp)
 
+	} else if command == "handshake" {
+
+		fileName := os.Args[2]
+		torrentFile, err := ParseTorrentFile(fileName)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		hash, err := torrentInfoHash(torrentFile)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		peerId, err := SendHandshake(torrentFile, hash, os.Args[3])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Printf("Peer ID: %s\n", peerId)
 	} else {
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
