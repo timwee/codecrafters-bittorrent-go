@@ -4,27 +4,18 @@ import (
 	// Uncomment this line to pass the first stage
 	"bytes"
 	"crypto/sha1"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
 	"unicode"
 
+	lib "github.com/codecrafters-io/bittorrent-starter-go/lib"
 	bencode "github.com/jackpal/bencode-go" // Available if you need it!
 )
-
-type TorrentFileInfo struct {
-	Length      int    `bencode:"length"`
-	Name        string `bencode:"name"`
-	PieceLength int    `bencode:"piece length"`
-	Pieces      string `bencode:"pieces"`
-}
-
-type TorrentFile struct {
-	Announce string
-	Info     TorrentFileInfo
-}
 
 // Example:
 // - 5:hello -> hello
@@ -70,7 +61,7 @@ func decodeBenEncdoedNumber(bencodedString string) (int, error) {
 
 }
 
-func printInfo(torrent TorrentFile, hash []byte) {
+func printInfo(torrent lib.TorrentFile, hash []byte) {
 
 	fmt.Printf("Tracker URL: %s", torrent.Announce)
 	fmt.Printf("Length: %d\n", torrent.Info.Length)
@@ -82,22 +73,22 @@ func printInfo(torrent TorrentFile, hash []byte) {
 	}
 }
 
-func ParseTorrentFile(filename string) (TorrentFile, error) {
+func ParseTorrentFile(filename string) (lib.TorrentFile, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return TorrentFile{}, err
+		return lib.TorrentFile{}, err
 	}
 	defer file.Close()
 
-	info := TorrentFile{}
+	info := lib.TorrentFile{}
 	if err := bencode.Unmarshal(file, &info); err == nil {
 		return info, nil
 	} else {
-		return TorrentFile{}, err
+		return lib.TorrentFile{}, err
 	}
 }
 
-func torrentInfoHash(torrentFile TorrentFile) ([]byte, error) {
+func torrentInfoHash(torrentFile lib.TorrentFile) ([]byte, error) {
 	var buf bytes.Buffer
 	marshalErr := bencode.Marshal(&buf, torrentFile.Info)
 	if marshalErr != nil {
@@ -108,6 +99,17 @@ func torrentInfoHash(torrentFile TorrentFile) ([]byte, error) {
 	// shaInfo := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
 	shaInfo := hasher.Sum(nil)
 	return shaInfo, nil
+}
+
+func printIPs(trackerResp lib.TrackerResponse) {
+	offset := 0
+	for offset+6 <= len(trackerResp.Peers) {
+		ip := net.IP(trackerResp.Peers[offset : offset+4])
+
+		port := binary.BigEndian.Uint16([]byte(trackerResp.Peers[offset+4 : offset+6]))
+		fmt.Printf("%s:%d\n", ip.String(), port)
+		offset += 6
+	}
 }
 
 func main() {
@@ -138,6 +140,25 @@ func main() {
 		}
 
 		printInfo(torrentFile, hash)
+
+	} else if command == "peers" {
+		fileName := os.Args[2]
+		torrentFile, err := ParseTorrentFile(fileName)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		hash, err := torrentInfoHash(torrentFile)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		trackerResp, err := lib.GetPeers(torrentFile, hash)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		printIPs(trackerResp)
 
 	} else {
 		fmt.Println("Unknown command: " + command)

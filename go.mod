@@ -10,4 +10,8 @@ module github.com/codecrafters-io/bittorrent-starter-go
 
 go 1.16
 
-require github.com/jackpal/bencode-go v1.0.0 // indirect
+require (
+	github.com/dghubble/sling v1.4.1
+	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/jackpal/bencode-go v1.0.0
+)
