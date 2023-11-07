@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	PeerId = "0011223344556778899"
-	Port   = 6681
+	PeerId = "00112233445566778899"
+	Port   = 6881
 )
 
 func printInfo(torrent torrent.TorrentFile, hash []byte) {
@@ -150,7 +150,7 @@ func DownloadPieceSubcommand(torrentMetaFilePath string, pieceId int) ([]byte, e
 	})
 
 	fmt.Println("Retrieve peers...")
-	peersResponse, err := client.RequestPeers(0, 0, torrentFile.Info.Length, 1)
+	peersResponse, err := client.RequestPeers(torrentFile, hash)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
@@ -163,14 +163,8 @@ func DownloadPieceSubcommand(torrentMetaFilePath string, pieceId int) ([]byte, e
 	}
 	defer client.Close(peerAddress)
 
-	fmt.Printf("Connecting to %s...\n", peerAddress)
-	if err := client.Dial(peerAddress); err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-	defer client.Close(peerAddress)
 	fmt.Println("Sending handshake...")
-	_, err = client.Handshake(peerAddress)
+	_, err = client.Handshake(peerAddress, hash)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err

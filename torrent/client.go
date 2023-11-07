@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"net/url"
-	"strconv"
+
+	"github.com/dghubble/sling"
+	bencode "github.com/jackpal/bencode-go"
 )
 
 const (
@@ -79,53 +79,37 @@ type PeersResult struct {
 	Peers    []string
 }
 
-func (client *Client) RequestPeers(uploaded, downloaded, left, compact int) (*PeersResult, error) {
-	infoHashBytes, err := hex.DecodeString(client.Meta.InfoHash)
+func (client *Client) RequestPeers(torrentFile TorrentFile, infoHash []byte) (*PeersResult, error) {
+	params := DefaultTrackerClientParams(string(infoHash), torrentFile.Info.Length)
+	req, err := sling.New().Get(torrentFile.Announce).QueryStruct(params).Request()
 	if err != nil {
-		return nil, err
+		return &PeersResult{}, err
 	}
-	baseURL, _ := url.Parse(client.Meta.Announce)
-	params := url.Values{}
-	params.Add("info_hash", string(infoHashBytes))
-	params.Add("peer_id", client.PeerId)
-	params.Add("port", strconv.Itoa(client.Port))
-	params.Add("uploaded", strconv.Itoa(uploaded))
-	params.Add("downloaded", strconv.Itoa(downloaded))
-	params.Add("left", strconv.Itoa(left))
-	params.Add("compact", strconv.Itoa(compact))
-	baseURL.RawQuery = params.Encode()
-	response, err := http.Get(baseURL.String())
+
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		fmt.Printf("client: error making http request: %s\n", err)
+		return &PeersResult{}, err
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return nil, errors.New("bad response")
-	}
-	var peersResponse PeersResponse
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(response.Body)
-	bencodeBody := buf.String()
-	data, err := DecodeBencode(bencodeBody)
+	defer res.Body.Close()
+	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, err
+		fmt.Printf("client: could not read response body: %s\n", err)
+		return &PeersResult{}, err
 	}
-	marshaledData, err := json.Marshal(data)
-	if err != nil {
-		return nil, err
+	// fmt.Printf("client: response body: %s\n", resBody)
+
+	var trackerResp TrackerResponse
+	if err := bencode.Unmarshal(bytes.NewReader(resBody), &trackerResp); err != nil {
+		return &PeersResult{}, err
 	}
-	err = json.Unmarshal(marshaledData, &peersResponse)
-	if err != nil {
-		return nil, err
-	}
-	m := data.(map[string]string)
-	p := m["peers"]
-	peers := ParsePeers(p)
+	peers := ParsePeers(trackerResp.Peers)
 	return &PeersResult{
-		Interval: peersResponse.Interval,
+		Interval: trackerResp.Interval,
 		Peers:    peers,
 	}, nil
 }
+
 func (client *Client) Dial(peerAddress string) error {
 	conn, err := net.Dial("tcp", peerAddress)
 	if err != nil {
@@ -134,6 +118,7 @@ func (client *Client) Dial(peerAddress string) error {
 	client.Conns[peerAddress] = conn
 	return nil
 }
+
 func (client *Client) Close(peerAddress string) {
 	conn, ok := client.Conns[peerAddress]
 	if !ok {
@@ -141,26 +126,33 @@ func (client *Client) Close(peerAddress string) {
 	}
 	conn.Close()
 }
-func (client *Client) Handshake(peerAddress string) (string, error) {
+
+func (client *Client) Handshake(peerAddress string, infohash []byte) (string, error) {
 	conn, ok := client.Conns[peerAddress]
 	if !ok {
 		return "", fmt.Errorf("no connection with peer address: %s", peerAddress)
 	}
-	infoHashBytes, err := hex.DecodeString(client.Meta.InfoHash)
-	if err != nil {
-		return "", err
-	}
-	// data := make([]byte, 0, 10)
-	data := make([]byte, 0)
-	data = append(data, []byte{19}...)
-	data = append(data, []byte("BitTorrent protocol")...)
-	data = append(data, []byte{0, 0, 0, 0, 0, 0, 0, 0}...)
-	data = append(data, infoHashBytes...)
-	data = append(data, []byte(client.Config.PeerId)...)
-	_, err = conn.Write(data)
-	if err != nil {
-		return "", err
 
+	var buffer bytes.Buffer
+	var infoHashBytesArray [20]byte
+	copy(infoHashBytesArray[:], infohash)
+
+	var peerIdBytesArray [20]byte
+	copy(peerIdBytesArray[:], []byte(client.Config.PeerId))
+	peerHandshakeMessageRequest := &PeerHandshakeMessage{
+		ProtocolLength: 19,
+		Protocol:       [19]byte{'B', 'i', 't', 'T', 'o', 'r', 'r', 'e', 'n', 't', ' ', 'p', 'r', 'o', 't', 'o', 'c', 'o', 'l'},
+		Reserved:       [8]byte{0, 0, 0, 0, 0, 0, 0, 0},
+		InfoHash:       infoHashBytesArray,
+		PeerId:         peerIdBytesArray,
+	}
+	err := binary.Write(&buffer, binary.BigEndian, peerHandshakeMessageRequest)
+	if err != nil {
+		return "", fmt.Errorf("unable to write peer handshake message to buffer: %w", err)
+	}
+	_, err = conn.Write(buffer.Bytes())
+	if err != nil {
+		return "", fmt.Errorf("unable to write handshake message to peer %s: %w", peerAddress, err)
 	}
 	reply := make([]byte, 48+20)
 	_, err = conn.Read(reply)
@@ -171,6 +163,7 @@ func (client *Client) Handshake(peerAddress string) (string, error) {
 
 	return hex.EncodeToString(peerId), nil
 }
+
 func (client *Client) RecieveMessage(peerAddress string) (byte, []byte, error) {
 	conn, ok := client.Conns[peerAddress]
 	if !ok {
@@ -231,9 +224,11 @@ func (client *Client) RecieveUnchoke(peerAddress string) error {
 	}
 	return nil
 }
+
 func (client *Client) SendInterested(peerAddress string) error {
 	return client.SendMessage(peerAddress, MessageIntereseted, []byte{})
 }
+
 func (client *Client) SendRequest(peerAddress string, pieceIndex int, begin, length int) error {
 	message := make([]byte, 12)
 	binary.BigEndian.PutUint32(message[0:4], uint32(pieceIndex))
@@ -241,6 +236,7 @@ func (client *Client) SendRequest(peerAddress string, pieceIndex int, begin, len
 	binary.BigEndian.PutUint32(message[8:12], uint32(length))
 	return client.SendMessage(peerAddress, MessageRequest, message)
 }
+
 func (client *Client) RecievePiece(peerAddress string) (uint32, uint32, []byte, error) {
 	messageType, message, err := client.RecieveMessage(peerAddress)
 	if err != nil {
@@ -254,6 +250,7 @@ func (client *Client) RecievePiece(peerAddress string) (uint32, uint32, []byte, 
 	block := message[8:]
 	return pieceIndex, begin, block, nil
 }
+
 func (client *Client) DownloadFile(peerAddress string, pieceIndex int) ([]byte, error) {
 	pieceLength := client.Meta.Info.PieceLength
 	length := client.Meta.Info.Length
