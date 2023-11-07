@@ -133,10 +133,12 @@ func HandshakeCommand(fileName string, peer string) (string, error) {
 func DownloadPieceSubcommand(torrentMetaFilePath string, pieceId int) ([]byte, error) {
 	torrentFile, err := ParseTorrentFile(torrentMetaFilePath)
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	hash, err := torrentInfoHash(torrentFile)
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 
@@ -150,43 +152,51 @@ func DownloadPieceSubcommand(torrentMetaFilePath string, pieceId int) ([]byte, e
 	fmt.Println("Retrieve peers...")
 	peersResponse, err := client.RequestPeers(0, 0, torrentFile.Info.Length, 1)
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	peerAddress := peersResponse.Peers[1]
 	fmt.Printf("Connecting to %s...\n", peerAddress)
 	if err := client.Dial(peerAddress); err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	defer client.Close(peerAddress)
 
 	fmt.Printf("Connecting to %s...\n", peerAddress)
 	if err := client.Dial(peerAddress); err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	defer client.Close(peerAddress)
 	fmt.Println("Sending handshake...")
 	_, err = client.Handshake(peerAddress)
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	fmt.Println("Handshake is successful")
 	fmt.Println("Waiting for 'bitfield'...")
 	if _, err := client.RecieveBitfield(peerAddress); err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	fmt.Println("Recieved 'bitfield'...")
 	fmt.Println("Sending 'interested'")
 	if err := client.SendInterested(peerAddress); err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	fmt.Println("Sent 'interested'")
 	fmt.Println("Wating for 'unchoke'...")
 	if err := client.RecieveUnchoke(peerAddress); err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	fmt.Println("Recieved 'unchoke'")
 	data, err := client.DownloadFile(peerAddress, pieceId)
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	return data, nil
