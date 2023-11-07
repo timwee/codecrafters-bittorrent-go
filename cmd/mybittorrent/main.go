@@ -10,57 +10,17 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"strings"
-	"unicode"
 
+	"github.com/codecrafters-io/bittorrent-starter-go/torrent"
 	bencode "github.com/jackpal/bencode-go" // Available if you need it!
 )
 
-// Example:
-// - 5:hello -> hello
-// - 10:hello12345 -> hello12345
-func decodeBencode(bencodedString string) (interface{}, error) {
-	if unicode.IsDigit(rune(bencodedString[0])) {
-		var firstColonIndex int
+const (
+	PeerId = "0011223344556778899"
+	Port   = 6681
+)
 
-		for i := 0; i < len(bencodedString); i++ {
-			if bencodedString[i] == ':' {
-				firstColonIndex = i
-				break
-			}
-		}
-
-		lengthStr := bencodedString[:firstColonIndex]
-
-		length, err := strconv.Atoi(lengthStr)
-		if err != nil {
-			return "", err
-		}
-
-		return bencodedString[firstColonIndex+1 : firstColonIndex+1+length], nil
-	} else if number, intErr := decodeBenEncdoedNumber(bencodedString); intErr == nil {
-		return number, intErr
-	} else if data, err := bencode.Decode(strings.NewReader(bencodedString)); err == nil {
-		return data, err
-		// tr
-	} else {
-		return "", fmt.Errorf("only strings are supported at the moment")
-	}
-}
-
-func decodeBenEncdoedNumber(bencodedString string) (int, error) {
-	strSize := len(bencodedString)
-	if strSize < 3 {
-		return -1, fmt.Errorf("not long enough for ben encoded int")
-	}
-	if bencodedString[0] != 'i' || bencodedString[strSize-1] != 'e' {
-		return -1, fmt.Errorf("doesn't have i and e surrounding the string")
-	}
-	return strconv.Atoi(bencodedString[1 : strSize-1])
-
-}
-
-func printInfo(torrent TorrentFile, hash []byte) {
+func printInfo(torrent torrent.TorrentFile, hash []byte) {
 
 	fmt.Printf("Tracker URL: %s", torrent.Announce)
 	fmt.Printf("Length: %d\n", torrent.Info.Length)
@@ -72,22 +32,22 @@ func printInfo(torrent TorrentFile, hash []byte) {
 	}
 }
 
-func ParseTorrentFile(filename string) (TorrentFile, error) {
+func ParseTorrentFile(filename string) (torrent.TorrentFile, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return TorrentFile{}, err
+		return torrent.TorrentFile{}, err
 	}
 	defer file.Close()
 
-	info := TorrentFile{}
+	info := torrent.TorrentFile{}
 	if err := bencode.Unmarshal(file, &info); err == nil {
 		return info, nil
 	} else {
-		return TorrentFile{}, err
+		return torrent.TorrentFile{}, err
 	}
 }
 
-func torrentInfoHash(torrentFile TorrentFile) ([]byte, error) {
+func torrentInfoHash(torrentFile torrent.TorrentFile) ([]byte, error) {
 	var buf bytes.Buffer
 	marshalErr := bencode.Marshal(&buf, torrentFile.Info)
 	if marshalErr != nil {
@@ -100,7 +60,7 @@ func torrentInfoHash(torrentFile TorrentFile) ([]byte, error) {
 	return shaInfo, nil
 }
 
-func printIPs(trackerResp TrackerResponse) {
+func printIPs(trackerResp torrent.TrackerResponse) {
 	offset := 0
 	for offset+6 <= len(trackerResp.Peers) {
 		ip := net.IP(trackerResp.Peers[offset : offset+4])
@@ -112,7 +72,7 @@ func printIPs(trackerResp TrackerResponse) {
 }
 
 func DecodeCommand(bencodedValue string) (string, error) {
-	decoded, err := decodeBencode(bencodedValue)
+	decoded, err := torrent.DecodeBencode(bencodedValue)
 	if err != nil {
 		return "", err
 	}
@@ -138,18 +98,18 @@ func InfoCommand(fileName string) error {
 	return nil
 }
 
-func PeersCommand(fileName string) (TrackerResponse, error) {
+func PeersCommand(fileName string) (torrent.TrackerResponse, error) {
 	torrentFile, err := ParseTorrentFile(fileName)
 	if err != nil {
-		return TrackerResponse{}, err
+		return torrent.TrackerResponse{}, err
 	}
 	hash, err := torrentInfoHash(torrentFile)
 	if err != nil {
-		return TrackerResponse{}, err
+		return torrent.TrackerResponse{}, err
 	}
-	trackerResp, err := GetPeers(torrentFile, hash)
+	trackerResp, err := torrent.GetPeers(torrentFile, hash)
 	if err != nil {
-		return TrackerResponse{}, err
+		return torrent.TrackerResponse{}, err
 	}
 	return trackerResp, nil
 }
@@ -163,11 +123,73 @@ func HandshakeCommand(fileName string, peer string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	peerId, err := SendHandshake(torrentFile, hash, peer)
+	peerId, err := torrent.SendHandshake(torrentFile, hash, peer)
 	if err != nil {
 		return "", err
 	}
 	return peerId, nil
+}
+
+func DownloadPieceSubcommand(torrentMetaFilePath string, pieceId int) ([]byte, error) {
+	torrentFile, err := ParseTorrentFile(torrentMetaFilePath)
+	if err != nil {
+		return nil, err
+	}
+	hash, err := torrentInfoHash(torrentFile)
+	if err != nil {
+		return nil, err
+	}
+
+	torrentFile.InfoHash = string(hash)
+
+	client := torrent.NewClient(&torrentFile, &torrent.Config{
+		PeerId: PeerId,
+		Port:   Port,
+	})
+
+	fmt.Println("Retrieve peers...")
+	peersResponse, err := client.RequestPeers(0, 0, torrentFile.Info.Length, 1)
+	if err != nil {
+		return nil, err
+	}
+	peerAddress := peersResponse.Peers[1]
+	fmt.Printf("Connecting to %s...\n", peerAddress)
+	if err := client.Dial(peerAddress); err != nil {
+		return nil, err
+	}
+	defer client.Close(peerAddress)
+
+	fmt.Printf("Connecting to %s...\n", peerAddress)
+	if err := client.Dial(peerAddress); err != nil {
+		return nil, err
+	}
+	defer client.Close(peerAddress)
+	fmt.Println("Sending handshake...")
+	_, err = client.Handshake(peerAddress)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("Handshake is successful")
+	fmt.Println("Waiting for 'bitfield'...")
+	if _, err := client.RecieveBitfield(peerAddress); err != nil {
+		return nil, err
+	}
+	fmt.Println("Recieved 'bitfield'...")
+	fmt.Println("Sending 'interested'")
+	if err := client.SendInterested(peerAddress); err != nil {
+		return nil, err
+	}
+	fmt.Println("Sent 'interested'")
+	fmt.Println("Wating for 'unchoke'...")
+	if err := client.RecieveUnchoke(peerAddress); err != nil {
+		return nil, err
+	}
+	fmt.Println("Recieved 'unchoke'")
+	data, err := client.DownloadFile(peerAddress, pieceId)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func main() {
@@ -201,6 +223,26 @@ func main() {
 			return
 		}
 		fmt.Printf("Peer ID: %s\n", peerId)
+
+	case "download_piece":
+		outputFilePath := os.Args[3]
+		torrentMetaFilePath := os.Args[4]
+		pieceIndex, err := strconv.Atoi(os.Args[5])
+		if err != nil {
+			panic(err)
+		}
+		output, err := DownloadPieceSubcommand(torrentMetaFilePath, pieceIndex)
+		if err != nil {
+			panic(err)
+		}
+		file, err := os.Create(outputFilePath)
+		if err != nil {
+			panic(err)
+		}
+		defer file.Close()
+		file.Write(output)
+
+		fmt.Printf("Piece %d downloaded to %s\n", pieceIndex, outputFilePath)
 	default:
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)

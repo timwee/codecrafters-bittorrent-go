@@ -1,4 +1,4 @@
-package main
+package torrent
 
 import "strconv"
 
@@ -12,6 +12,7 @@ type TorrentFileInfo struct {
 type TorrentFile struct {
 	Announce string
 	Info     TorrentFileInfo
+	InfoHash string
 }
 
 type TrackerResponse struct {
