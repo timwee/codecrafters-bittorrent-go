@@ -111,74 +111,97 @@ func printIPs(trackerResp TrackerResponse) {
 	}
 }
 
+func DecodeCommand(bencodedValue string) (string, error) {
+	decoded, err := decodeBencode(bencodedValue)
+	if err != nil {
+		return "", err
+	}
+
+	jsonOutput, err := json.Marshal(decoded)
+	if err != nil {
+		return "", err
+	}
+	return string(jsonOutput), nil
+}
+
+func InfoCommand(fileName string) error {
+	torrentFile, err := ParseTorrentFile(fileName)
+	if err != nil {
+		return err
+	}
+	hash, err := torrentInfoHash(torrentFile)
+	if err != nil {
+		return err
+	}
+
+	printInfo(torrentFile, hash)
+	return nil
+}
+
+func PeersCommand(fileName string) (TrackerResponse, error) {
+	torrentFile, err := ParseTorrentFile(fileName)
+	if err != nil {
+		return TrackerResponse{}, err
+	}
+	hash, err := torrentInfoHash(torrentFile)
+	if err != nil {
+		return TrackerResponse{}, err
+	}
+	trackerResp, err := GetPeers(torrentFile, hash)
+	if err != nil {
+		return TrackerResponse{}, err
+	}
+	return trackerResp, nil
+}
+
+func HandshakeCommand(fileName string, peer string) (string, error) {
+	torrentFile, err := ParseTorrentFile(fileName)
+	if err != nil {
+		return "", err
+	}
+	hash, err := torrentInfoHash(torrentFile)
+	if err != nil {
+		return "", err
+	}
+	peerId, err := SendHandshake(torrentFile, hash, peer)
+	if err != nil {
+		return "", err
+	}
+	return peerId, nil
+}
+
 func main() {
 	command := os.Args[1]
+	switch command {
+	case "decode":
+		output, err := DecodeCommand(os.Args[2])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println(output)
+	case "info":
+		err := InfoCommand(os.Args[2])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	case "peers":
+		output, err := PeersCommand(os.Args[2])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		printIPs(output)
 
-	if command == "decode" {
-		bencodedValue := os.Args[2]
-
-		decoded, err := decodeBencode(bencodedValue)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		jsonOutput, _ := json.Marshal(decoded)
-		fmt.Println(string(jsonOutput))
-	} else if command == "info" {
-		fileName := os.Args[2]
-		torrentFile, err := ParseTorrentFile(fileName)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		hash, err := torrentInfoHash(torrentFile)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		printInfo(torrentFile, hash)
-
-	} else if command == "peers" {
-		fileName := os.Args[2]
-		torrentFile, err := ParseTorrentFile(fileName)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		hash, err := torrentInfoHash(torrentFile)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		trackerResp, err := GetPeers(torrentFile, hash)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		printIPs(trackerResp)
-
-	} else if command == "handshake" {
-
-		fileName := os.Args[2]
-		torrentFile, err := ParseTorrentFile(fileName)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		hash, err := torrentInfoHash(torrentFile)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		peerId, err := SendHandshake(torrentFile, hash, os.Args[3])
+	case "handshake":
+		peerId, err := HandshakeCommand(os.Args[2], os.Args[3])
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 		fmt.Printf("Peer ID: %s\n", peerId)
-	} else {
+	default:
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
 	}
