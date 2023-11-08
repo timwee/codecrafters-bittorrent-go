@@ -1,9 +1,6 @@
 package main
 
 import (
-	// Uncomment this line to pass the first stage
-	"bytes"
-	"crypto/sha1"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -12,7 +9,6 @@ import (
 	"strconv"
 
 	"github.com/codecrafters-io/bittorrent-starter-go/torrent"
-	bencode "github.com/jackpal/bencode-go" // Available if you need it!
 )
 
 const (
@@ -20,44 +16,16 @@ const (
 	Port   = 6881
 )
 
-func printInfo(torrent torrent.TorrentFile, hash []byte) {
+func printInfo(meta *torrent.TorrentFileMeta) {
 
-	fmt.Printf("Tracker URL: %s", torrent.Announce)
-	fmt.Printf("Length: %d\n", torrent.Info.Length)
-	fmt.Printf("Info Hash: %x\n", hash)
-	fmt.Printf("Piece Length: %d\n", torrent.Info.PieceLength)
+	fmt.Printf("Tracker URL: %s", meta.TorrentFileInfo.Announce)
+	fmt.Printf("Length: %d\n", meta.TorrentFileInfo.Info.Length)
+	fmt.Printf("Info Hash: %x\n", meta.InfoHashBytes)
+	fmt.Printf("Piece Length: %d\n", meta.TorrentFileInfo.Info.PieceLength)
 	fmt.Println("Pieces Hashes:")
-	for i := 0; i < len(torrent.Info.Pieces); i += 20 {
-		fmt.Printf("%x\n", torrent.Info.Pieces[i:i+20])
+	for i := 0; i < len(meta.TorrentFileInfo.Info.Pieces); i += 20 {
+		fmt.Printf("%x\n", meta.TorrentFileInfo.Info.Pieces[i:i+20])
 	}
-}
-
-func ParseTorrentFile(filename string) (torrent.TorrentFile, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return torrent.TorrentFile{}, err
-	}
-	defer file.Close()
-
-	info := torrent.TorrentFile{}
-	if err := bencode.Unmarshal(file, &info); err == nil {
-		return info, nil
-	} else {
-		return torrent.TorrentFile{}, err
-	}
-}
-
-func torrentInfoHash(torrentFile torrent.TorrentFile) ([]byte, error) {
-	var buf bytes.Buffer
-	marshalErr := bencode.Marshal(&buf, torrentFile.Info)
-	if marshalErr != nil {
-		return nil, marshalErr
-	}
-	hasher := sha1.New()
-	hasher.Write(buf.Bytes())
-	// shaInfo := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
-	shaInfo := hasher.Sum(nil)
-	return shaInfo, nil
 }
 
 func printIPs(trackerResp torrent.TrackerResponse) {
@@ -85,29 +53,21 @@ func DecodeCommand(bencodedValue string) (string, error) {
 }
 
 func InfoCommand(fileName string) error {
-	torrentFile, err := ParseTorrentFile(fileName)
-	if err != nil {
-		return err
-	}
-	hash, err := torrentInfoHash(torrentFile)
+	torrentFileMeta, err := torrent.ParseTorrentFile(fileName)
 	if err != nil {
 		return err
 	}
 
-	printInfo(torrentFile, hash)
+	printInfo(torrentFileMeta)
 	return nil
 }
 
 func PeersCommand(fileName string) (torrent.TrackerResponse, error) {
-	torrentFile, err := ParseTorrentFile(fileName)
+	meta, err := torrent.ParseTorrentFile(fileName)
 	if err != nil {
 		return torrent.TrackerResponse{}, err
 	}
-	hash, err := torrentInfoHash(torrentFile)
-	if err != nil {
-		return torrent.TrackerResponse{}, err
-	}
-	trackerResp, err := torrent.GetPeers(torrentFile, hash)
+	trackerResp, err := torrent.GetPeers(meta)
 	if err != nil {
 		return torrent.TrackerResponse{}, err
 	}
@@ -115,15 +75,12 @@ func PeersCommand(fileName string) (torrent.TrackerResponse, error) {
 }
 
 func HandshakeCommand(fileName string, peer string) (string, error) {
-	torrentFile, err := ParseTorrentFile(fileName)
+	meta, err := torrent.ParseTorrentFile(fileName)
 	if err != nil {
 		return "", err
 	}
-	hash, err := torrentInfoHash(torrentFile)
-	if err != nil {
-		return "", err
-	}
-	peerId, err := torrent.SendHandshake(torrentFile, hash, peer)
+
+	peerId, err := torrent.SendHandshake(meta, peer)
 	if err != nil {
 		return "", err
 	}
@@ -131,26 +88,19 @@ func HandshakeCommand(fileName string, peer string) (string, error) {
 }
 
 func DownloadPieceSubcommand(torrentMetaFilePath string, pieceId int) ([]byte, error) {
-	torrentFile, err := ParseTorrentFile(torrentMetaFilePath)
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-	hash, err := torrentInfoHash(torrentFile)
+	meta, err := torrent.ParseTorrentFile(torrentMetaFilePath)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	}
 
-	torrentFile.InfoHash = string(hash)
-
-	client := torrent.NewClient(&torrentFile, &torrent.Config{
+	client := torrent.NewClient(meta, &torrent.Config{
 		PeerId: PeerId,
 		Port:   Port,
 	})
 
 	fmt.Println("Retrieve peers...")
-	peersResponse, err := client.RequestPeers(torrentFile, hash)
+	peersResponse, err := client.RequestPeers(meta)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
@@ -164,7 +114,7 @@ func DownloadPieceSubcommand(torrentMetaFilePath string, pieceId int) ([]byte, e
 	defer client.Close(peerAddress)
 
 	fmt.Println("Sending handshake...")
-	_, err = client.Handshake(peerAddress, hash)
+	_, err = client.Handshake(peerAddress, meta.InfoHashBytes)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err

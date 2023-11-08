@@ -10,9 +10,9 @@ import (
 	"github.com/jackpal/bencode-go"
 )
 
-func GetPeers(torrentFile TorrentFile, infoHash []byte) (TrackerResponse, error) {
-	params := DefaultTrackerClientParams(string(infoHash), torrentFile.Info.Length)
-	req, err := sling.New().Get(torrentFile.Announce).QueryStruct(params).Request()
+func GetPeers(meta *TorrentFileMeta) (TrackerResponse, error) {
+	params := DefaultTrackerClientParams(string(meta.InfoHashBytes), meta.TorrentFileInfo.Info.Length)
+	req, err := sling.New().Get(meta.TorrentFileInfo.Announce).QueryStruct(params).Request()
 	if err != nil {
 		return TrackerResponse{}, err
 	}

@@ -15,6 +15,11 @@ type TorrentFile struct {
 	InfoHash string
 }
 
+type TorrentFileMeta struct {
+	TorrentFileInfo TorrentFile
+	InfoHashBytes   []byte
+}
+
 type TrackerResponse struct {
 	Interval int    `bencode:"interval"`
 	Peers    string `bencode:"peers"`

@@ -30,12 +30,12 @@ type Config struct {
 	Port   int
 }
 type Client struct {
-	Meta *TorrentFile
+	Meta *TorrentFileMeta
 	*Config
 	Conns map[string]net.Conn
 }
 
-func NewClient(meta *TorrentFile, config *Config) *Client {
+func NewClient(meta *TorrentFileMeta, config *Config) *Client {
 	return &Client{
 		Meta:   meta,
 		Config: config,
@@ -79,9 +79,10 @@ type PeersResult struct {
 	Peers    []string
 }
 
-func (client *Client) RequestPeers(torrentFile TorrentFile, infoHash []byte) (*PeersResult, error) {
-	params := DefaultTrackerClientParams(string(infoHash), torrentFile.Info.Length)
-	req, err := sling.New().Get(torrentFile.Announce).QueryStruct(params).Request()
+func (client *Client) RequestPeers(meta *TorrentFileMeta) (*PeersResult, error) {
+	params := DefaultTrackerClientParams(string(meta.InfoHashBytes),
+		meta.TorrentFileInfo.Info.Length)
+	req, err := sling.New().Get(meta.TorrentFileInfo.Announce).QueryStruct(params).Request()
 	if err != nil {
 		return &PeersResult{}, err
 	}
@@ -252,8 +253,8 @@ func (client *Client) RecievePiece(peerAddress string) (uint32, uint32, []byte, 
 }
 
 func (client *Client) DownloadFile(peerAddress string, pieceIndex int) ([]byte, error) {
-	pieceLength := client.Meta.Info.PieceLength
-	length := client.Meta.Info.Length
+	pieceLength := client.Meta.TorrentFileInfo.Info.PieceLength
+	length := client.Meta.TorrentFileInfo.Info.Length
 	// last not whole piece
 	if pieceIndex >= int(length/pieceLength) {
 		pieceLength = length - (pieceLength * pieceIndex)

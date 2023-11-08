@@ -8,7 +8,7 @@ import (
 	"net"
 )
 
-func SendHandshake(torrentFile TorrentFile, infohash []byte, peer string) (string, error) {
+func SendHandshake(meta *TorrentFileMeta, peer string) (string, error) {
 	conn, err := net.Dial("tcp", peer)
 	if err != nil {
 		return "", fmt.Errorf("unable to dial peer %s: %w", peer, err)
@@ -20,7 +20,7 @@ func SendHandshake(torrentFile TorrentFile, infohash []byte, peer string) (strin
 	// if err != nil {
 	// 	return "", fmt.Errorf("unable to decode hex info hash bytes %s: %w", infohash, err)
 	// }
-	copy(infoHashBytesArray[:], infohash)
+	copy(infoHashBytesArray[:], meta.InfoHashBytes)
 	peerHandshakeMessageRequest := &PeerHandshakeMessage{
 		ProtocolLength: 19,
 		Protocol:       [19]byte{'B', 'i', 't', 'T', 'o', 'r', 'r', 'e', 'n', 't', ' ', 'p', 'r', 'o', 't', 'o', 'c', 'o', 'l'},
