@@ -252,7 +252,7 @@ func (client *Client) RecievePiece(peerAddress string) (uint32, uint32, []byte, 
 	return pieceIndex, begin, block, nil
 }
 
-func (client *Client) DownlaodPiece(meta *TorrentFileMeta, peerAddress string, pieceIndex int) ([]byte, error) {
+func (client *Client) DownloadPiece(meta *TorrentFileMeta, peerAddress string, pieceIndex int) ([]byte, error) {
 	fmt.Printf("Connecting to %s...\n", peerAddress)
 	if err := client.Dial(peerAddress); err != nil {
 		fmt.Println(err)
@@ -323,4 +323,41 @@ func (client *Client) DownlaodPiece(meta *TorrentFileMeta, peerAddress string, p
 	}
 	return data, nil
 
+}
+
+func SplitBytes(input []byte, chunkSize int) [][]byte {
+	if chunkSize <= 0 {
+		return nil
+	}
+	var result [][]byte
+	for i := 0; i < len(input); i += chunkSize {
+		end := i + chunkSize
+		if end > len(input) {
+			end = len(input)
+		}
+		result = append(result, input[i:end])
+	}
+	return result
+}
+
+func (client *Client) DownloadFile(meta *TorrentFileMeta, peerAddress string) ([]byte, error) {
+
+	data := make([]byte, meta.TorrentFileInfo.Info.Length)
+	bytesChunk := SplitBytes([]byte(meta.TorrentFileInfo.Info.Pieces), 20)
+	fmt.Printf("Length: %d pieceLength: %d \n",
+		meta.TorrentFileInfo.Info.Length,
+		meta.TorrentFileInfo.Info.PieceLength)
+	for index := range bytesChunk {
+		startIndex := index * meta.TorrentFileInfo.Info.PieceLength
+		fmt.Printf("pieceIndex: %d byteIndex: %d\n", index, startIndex)
+		if startIndex >= meta.TorrentFileInfo.Info.Length {
+			startIndex = meta.TorrentFileInfo.Info.Length - (startIndex-1)*meta.TorrentFileInfo.Info.PieceLength
+		}
+		piece, err := client.DownloadPiece(meta, peerAddress, index)
+		if err != nil {
+			return []byte{}, err
+		}
+		copy(data[startIndex:], piece)
+	}
+	return data, nil
 }

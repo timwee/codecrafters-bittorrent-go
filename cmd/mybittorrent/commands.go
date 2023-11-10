@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 
 	"github.com/codecrafters-io/bittorrent-starter-go/torrent"
 )
@@ -105,10 +106,44 @@ func DownloadPieceSubcommand(torrentMetaFilePath string, pieceId int) ([]byte, e
 	}
 	peerAddress := peersResponse.Peers[1]
 
-	data, err := client.DownlaodPiece(meta, peerAddress, pieceId)
+	data, err := client.DownloadPiece(meta, peerAddress, pieceId)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	}
 	return data, nil
+}
+
+func DownloadFileSubCommand(outputFilePath, torrentFileName string) {
+	meta, err := torrent.ParseTorrentFile(torrentFileName)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	client := torrent.NewClient(meta, &torrent.Config{
+		PeerId: PeerId,
+		Port:   Port,
+	})
+
+	fmt.Println("Retrieve peers...")
+	peersResponse, err := client.RequestPeers(meta)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	peerAddress := peersResponse.Peers[0]
+	// peerAddr := fmt.Sprintf("%s:%d", peer.IP, peer.Port)
+	// cli := NewClient("00112233445566778899")
+	data, err := client.DownloadFile(meta, peerAddress)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	file, err := os.Create(outputFilePath)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	file.Write(data)
+	fmt.Printf("Downloaded test.torrent to to %s\n", outputFilePath)
 }

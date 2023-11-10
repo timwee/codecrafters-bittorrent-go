@@ -57,6 +57,11 @@ func main() {
 		file.Write(output)
 
 		fmt.Printf("Piece %d downloaded to %s\n", pieceIndex, outputFilePath)
+	case "download":
+		outputFilePath := os.Args[3]
+		torrentFileName := os.Args[4]
+		DownloadFileSubCommand(outputFilePath, torrentFileName)
+
 	default:
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
